@@ -256,7 +256,7 @@ InvoiceReconcileEnv/
 
 ## Author
 
-**ShambhaviS08** — OpenEnv AI Hackathon 2025
+**ShambhaviS08** — OpenEnv AI Hackathon 2026
 
 ---
 
