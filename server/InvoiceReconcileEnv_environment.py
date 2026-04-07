@@ -414,8 +414,11 @@ def grade_episode(
             if bonus_info.get("captured"):
                 score = min(1.0, score + 0.05)
 
-    return round(min(max(score, 0.0), 1.0), 3)
-
+    score = round(min(max(score, 0.0), 1.0), 3)
+    # Clamp strictly within (0, 1) as required by validator
+    score = min(score, 0.999)
+    score = max(score, 0.001)
+    return score
 
 # ---------------------------------------------------------------------------
 # Environment
