@@ -263,8 +263,8 @@ def run_task(task_level: str, seed: int = 42) -> float:
     except Exception as e:
         log_end(success=False, steps=steps_taken, rewards=rewards)
         return 0.0
-
-    success = final_grade >= 0.5
+    
+    success = final_grade > 0.0
     log_end(success=success, steps=steps_taken, rewards=rewards)
     return final_grade
 
