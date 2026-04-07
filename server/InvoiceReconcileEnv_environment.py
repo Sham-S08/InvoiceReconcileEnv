@@ -157,7 +157,7 @@ def generate_scenario(task_level: str, seed: int = 42):
                 "has_discrepancy": False,
                 "discrepancy_type": None,
                 "correct_amount": inv["total"],
-                "price_variance_pct": 0.0,
+                "price_variance_pct": 0.01,
             }
         }
         return [inv], {"PO-INV-001": po}, {"GR-INV-001": receipt}, ground_truth
@@ -180,7 +180,7 @@ def generate_scenario(task_level: str, seed: int = 42):
             "has_discrepancy": False,
             "discrepancy_type": None,
             "correct_amount": inv["total"],
-            "price_variance_pct": 0.0,
+            "price_variance_pct": 0.01,
         }
 
         # INV-102: Price variance = 25% (20→25) — hard flag (>5%)
@@ -212,7 +212,7 @@ def generate_scenario(task_level: str, seed: int = 42):
             "has_discrepancy": True,
             "discrepancy_type": "quantity",
             "correct_amount": None,
-            "price_variance_pct": 0.0,
+            "price_variance_pct": 0.01,
         }
 
         return invoices, pos, receipts, ground_truth
@@ -236,33 +236,31 @@ def generate_scenario(task_level: str, seed: int = 42):
             "has_discrepancy": False,
             "discrepancy_type": None,
             "correct_amount": inv["total"],
-            "price_variance_pct": 0.0,
+            "price_variance_pct": 0.01,
         }
 
         # INV-202: Price variance = 1.67% (15.00→15.25) — WITHIN soft tolerance (<=2%) → approve
-        # This is the tolerance band trap: naive agent flags it, smart agent approves it
         v = vendors[1]
         qty = 100
         agreed_price, invoice_price = 15.00, 15.25
-        variance_pct = abs(invoice_price - agreed_price) / agreed_price  # ~0.0167
+        variance_pct = abs(invoice_price - agreed_price) / agreed_price
         inv2 = make_invoice("INV-202", v, qty, invoice_price, ocr=True, noise_level="hard")
         invoices.append(inv2)
         pos["PO-INV-202"] = make_po("INV-202", v, qty, agreed_price)
         receipts["GR-INV-202"] = make_receipt("INV-202", qty)
         ground_truth["INV-202"] = {
-            "correct_action": "approve",       # within 2% — must approve, not flag
+            "correct_action": "approve",
             "has_discrepancy": False,
             "discrepancy_type": None,
             "correct_amount": inv2["total"],
             "price_variance_pct": round(variance_pct, 4),
         }
 
-        # INV-203: DUPLICATE of INV-201 with slightly different amount (8.55 vs 8.50)
-        # Same PO reference, OCR-noisy description — flag as duplicate
+        # INV-203: DUPLICATE of INV-201 with slightly different amount
         dup_price = 8.55
-        dup_variance_pct = abs(dup_price - price) / price  # ~0.0059 — soft range but it's a duplicate
+        dup_variance_pct = abs(dup_price - price) / price
         inv3 = make_invoice("INV-203", vendors[0], 200, dup_price, ocr=True, noise_level="hard")
-        inv3["po_reference"] = "PO-INV-201"   # same PO as INV-201 — dead giveaway
+        inv3["po_reference"] = "PO-INV-201"
         invoices.append(inv3)
         pos["PO-INV-203"] = make_po("INV-201", vendors[0], 200, price)
         receipts["GR-INV-203"] = make_receipt("INV-203", 200)
@@ -274,9 +272,7 @@ def generate_scenario(task_level: str, seed: int = 42):
             "price_variance_pct": round(dup_variance_pct, 4),
         }
 
-        # INV-204: PRIORITY invoice — 2% early payment discount if approved within 4 steps
-        # Partial shipment: 60 of 100 received — agent must choose: flag quantity OR capture discount
-        # Correct answer: flag quantity (can't approve a partial shipment regardless of discount)
+        # INV-204: PRIORITY invoice with partial shipment
         v = vendors[2]
         inv4 = make_invoice(
             "INV-204", v, qty=100, unit_price=30.00,
@@ -285,40 +281,38 @@ def generate_scenario(task_level: str, seed: int = 42):
         )
         invoices.append(inv4)
         pos["PO-INV-204"] = make_po("INV-204", v, qty=100, unit_price=30.00)
-        receipts["GR-INV-204"] = make_receipt("INV-204", qty=60)   # partial — only 60 received
+        receipts["GR-INV-204"] = make_receipt("INV-204", qty=60)
         ground_truth["INV-204"] = {
             "correct_action": "flag",
             "has_discrepancy": True,
-            "discrepancy_type": "quantity",   # partial shipment beats discount temptation
+            "discrepancy_type": "quantity",
             "correct_amount": None,
-            "price_variance_pct": 0.0,
+            "price_variance_pct": 0.01,
             "priority": True,
             "discount_pct": 0.02,
         }
 
-        # INV-205: FRAUD pattern — vendor ID in invoice (V003) doesn't match bank account
-        # PO has FastShip Ltd bank account, but invoice carries a different bank account
+        # INV-205: FRAUD pattern
         fraud_vendor = {"id": "V003", "name": "FastShip Ltd", "bank_account": "BANK-ACC-FRAUD-999"}
         inv5 = make_invoice("INV-205", fraud_vendor, qty=50, unit_price=30.00,
                             ocr=True, noise_level="hard")
-        # Override bank account to fraudulent one — vendor ID looks fine, bank account is wrong
         inv5["bank_account"] = "BANK-ACC-FRAUD-999"
         invoices.append(inv5)
-        pos["PO-INV-205"] = make_po("INV-205", vendors[2], 50, 30.00)  # correct vendor bank
+        pos["PO-INV-205"] = make_po("INV-205", vendors[2], 50, 30.00)
         receipts["GR-INV-205"] = make_receipt("INV-205", 50)
         ground_truth["INV-205"] = {
             "correct_action": "escalate",
             "has_discrepancy": True,
-            "discrepancy_type": "vendor",    # bank account mismatch = fraud signal
+            "discrepancy_type": "vendor",
             "correct_amount": None,
-            "price_variance_pct": 0.0,
+            "price_variance_pct": 0.01,
         }
 
         return invoices, pos, receipts, ground_truth
 
 
 # ---------------------------------------------------------------------------
-# Grader — FIXED FOR STRICT (0, 1) RANGE
+# Grader — FINAL ABSOLUTE FIX FOR (0, 1) RANGE
 # ---------------------------------------------------------------------------
 
 def grade_episode(
@@ -330,19 +324,11 @@ def grade_episode(
     priority_bonuses: dict = None,
 ) -> float:
     """
-    Score strictly between 0.0 and 1.0 (exclusive).
-    Deterministic. Applies tolerance-band awareness.
-
-    Tolerance bands:
-      - price_variance_pct <= TOLERANCE_SOFT (2%): correct action is approve
-      - TOLERANCE_SOFT < price_variance_pct <= TOLERANCE_HARD (5%): grey zone, flag gets partial credit
-      - price_variance_pct > TOLERANCE_HARD (5%): must flag — approving is penalized
-
-    Priority bonus: if agent approves a priority invoice before discount_deadline_steps expire,
-    they get a bonus. But if the invoice had a quantity discrepancy, no bonus applies.
+    Score strictly between 0 and 1 (exclusive).
+    Returns value guaranteed to be > 0 and < 1.
     """
     if not ground_truth:
-        return 0.5  # Default middle score if no invoices
+        return 0.5
 
     if priority_bonuses is None:
         priority_bonuses = {}
@@ -353,78 +339,83 @@ def grade_episode(
     for inv_id, truth in ground_truth.items():
         decision = decisions.get(inv_id, "none")
         flagged_type = flags.get(inv_id)
-        variance_pct = truth.get("price_variance_pct", 0.0)
+        variance_pct = truth.get("price_variance_pct", 0.01)
 
         # ---- APPROVE -------------------------------------------------------
         if truth["correct_action"] == "approve":
             if decision == "approve":
                 score += per_invoice * 1.0
             elif decision == "flag":
-                # Agent flagged something that was within tolerance — partial credit
                 if variance_pct <= TOLERANCE_SOFT:
-                    score += per_invoice * 0.2   # penalize: it was fine to approve
+                    score += per_invoice * 0.2
                 elif variance_pct <= TOLERANCE_HARD:
-                    score += per_invoice * 0.5   # grey zone — cautious but not optimal
+                    score += per_invoice * 0.5
                 else:
-                    score += per_invoice * 0.0   # shouldn't happen given correct_action=approve
+                    score += per_invoice * 0.01
             else:
-                score += 0.0
+                score += per_invoice * 0.01
 
         # ---- FLAG ----------------------------------------------------------
         elif truth["correct_action"] == "flag":
             if decision == "flag":
                 if flagged_type == truth["discrepancy_type"]:
-                    score += per_invoice * 1.0   # correct type
+                    score += per_invoice * 1.0
                 else:
-                    score += per_invoice * 0.5   # flagged but wrong type
+                    score += per_invoice * 0.5
             elif decision == "approve":
-                # Approving something that should be flagged
-                variance_pct_check = truth.get("price_variance_pct", 0.0)
+                variance_pct_check = truth.get("price_variance_pct", 0.01)
                 if truth["discrepancy_type"] == "price" and variance_pct_check <= TOLERANCE_HARD:
-                    score += per_invoice * 0.3   # marginal — in grey zone
+                    score += per_invoice * 0.3
                 else:
-                    score += 0.0   # hard miss
+                    score += per_invoice * 0.01
             else:
-                score += 0.0
+                score += per_invoice * 0.01
 
         # ---- ESCALATE ------------------------------------------------------
         elif truth["correct_action"] == "escalate":
             if decision == "escalate":
                 score += per_invoice * 1.0
             elif decision == "flag":
-                score += per_invoice * 0.4   # partial — noticed something, wrong action
+                score += per_invoice * 0.4
             else:
-                score += 0.0
+                score += per_invoice * 0.01
 
         # ---- REJECT --------------------------------------------------------
         elif truth["correct_action"] == "reject":
             if decision == "reject":
                 score += per_invoice * 1.0
             else:
-                score += 0.0
+                score += per_invoice * 0.01
 
-    # Efficiency penalty — using >80% of steps
+    # Efficiency penalty
     if steps_taken / max_steps > 0.80:
         score *= 0.85
 
-    # Priority bonus — agent captured early payment discount
+    # Priority bonus
     for inv_id, bonus_info in priority_bonuses.items():
         truth = ground_truth.get(inv_id, {})
-        # Only award if correct_action was approve AND agent actually approved
         if truth.get("correct_action") == "approve" and decisions.get(inv_id) == "approve":
             if bonus_info.get("captured"):
-                score = min(0.99, score + 0.05)  # Cap at 0.99 to stay below 1.0
+                score = min(0.98, score + 0.05)
 
-    # ========== CRITICAL FIX: CLAMP STRICTLY WITHIN (0, 1) ==========
-    # Map [0, 1] → (0.01, 0.99) to ensure strict exclusivity
-    # Formula: new_score = 0.01 + (score * 0.98)
+    # ========== ABSOLUTE FIX: GUARANTEE OUTPUT IN (0, 1) ==========
+    # Step 1: Clamp raw score to [0, 1]
+    score = max(0.0, min(1.0, score))
+    
+    # Step 2: Map [0, 1] → (0.01, 0.99) to guarantee strict exclusivity
     score = 0.01 + (score * 0.98)
     
-    # Final validation: ensure strictly within (0, 1)
-    score = max(0.001, min(0.999, score))
+    # Step 3: Round to 3 decimals
     score = round(score, 3)
     
+    # Step 4: Final validation (should never trigger, but safety net)
+    if score <= 0.0:
+        score = 0.01
+    if score >= 1.0:
+        score = 0.99
+    
     return score
+
 
 # ---------------------------------------------------------------------------
 # Environment
@@ -432,7 +423,7 @@ def grade_episode(
 
 class InvoicereconcileenvEnvironment(Environment):
     SUPPORTS_CONCURRENT_SESSIONS: bool = True
-    MAX_STEPS = 40   # bumped for hard task (5 invoices now)
+    MAX_STEPS = 40
 
     # CLASS-LEVEL SHARED STATE
     _task_level = "easy"
@@ -447,14 +438,12 @@ class InvoicereconcileenvEnvironment(Environment):
     _batch_status = {inv["invoice_id"]: "pending" for inv in _invoices}
     _episode_id = str(uuid4())
     _step_count = 0
-    _priority_bonuses = {}   # {inv_id: {"captured": bool, "steps_at_decision": int}}
+    _priority_bonuses = {}
 
     def __init__(self):
         pass
 
     def reset(self, options: dict = None) -> InvoicereconcileenvObservation:
-        import sys
-        print(f"DEBUG RESET OPTIONS RECEIVED: {options}", file=sys.stderr, flush=True)
         if options is None:
             options = {}
         task_level = options.get("task_level", "easy")
@@ -484,14 +473,14 @@ class InvoicereconcileenvEnvironment(Environment):
             step_count=0,
             task_level=task_level,
             done=False,
-            reward=0.5,  # FIXED: middle value instead of 0.001
+            reward=0.5,
         )
 
     def step(self, action: InvoicereconcileenvAction) -> InvoicereconcileenvObservation:
         cls = InvoicereconcileenvEnvironment
         cls._step_count += 1
         step = cls._step_count
-        reward = 0.0
+        reward = 0.5  # !!!!! INITIALIZE TO SAFE VALUE, NOT 0.0 !!!!!
         done = False
         message = ""
 
@@ -506,7 +495,6 @@ class InvoicereconcileenvEnvironment(Environment):
                 cls._extracted[inv_id] = True
                 reward = 0.15
 
-                # Build message with OCR-noisy values (what agent sees)
                 priority_note = ""
                 if current_inv.get("priority"):
                     remaining = current_inv.get("discount_deadline_steps", 0)
@@ -525,7 +513,7 @@ class InvoicereconcileenvEnvironment(Environment):
                     f"{priority_note}"
                 )
             else:
-                reward = 0.05
+                reward = 0.1
                 message = "Already extracted or no invoice available."
 
         # ------------------------------------------------------------------
@@ -545,7 +533,7 @@ class InvoicereconcileenvEnvironment(Environment):
                     f"bank={po.get('bank_account', 'N/A')}."
                 )
             else:
-                reward = 0.05
+                reward = 0.1
                 message = "PO not found or already retrieved."
 
         # ------------------------------------------------------------------
@@ -567,7 +555,7 @@ class InvoicereconcileenvEnvironment(Environment):
                     )
                 message = f"Goods receipt for {inv_id}: received qty={received_qty}.{partial_note}"
             else:
-                reward = 0.05
+                reward = 0.1
                 message = "Receipt not found or already retrieved."
 
         # ------------------------------------------------------------------
@@ -590,21 +578,20 @@ class InvoicereconcileenvEnvironment(Environment):
                         reward = 0.15
                         message = f"Discrepancy flagged but wrong type for {inv_id}. Expected: '{expected_type}', got: '{flagged_as}'."
                 else:
-                    # False flag — but check tolerance band
-                    variance_pct = truth.get("price_variance_pct", 0.0)
+                    variance_pct = truth.get("price_variance_pct", 0.01)
                     if variance_pct <= TOLERANCE_SOFT:
-                        reward = 0.05
+                        reward = 0.1
                         message = f"✗ False flag — {inv_id} was within tolerance ({variance_pct*100:.2f}% < {TOLERANCE_SOFT*100:.0f}%). Should approve."
                     elif variance_pct <= TOLERANCE_HARD:
-                        reward = 0.15
+                        reward = 0.2
                         message = f"Cautious flag on {inv_id} — price variance {variance_pct*100:.2f}% is in grey zone ({TOLERANCE_SOFT*100:.0f}%–{TOLERANCE_HARD*100:.0f}%). Partial credit."
                     else:
-                        reward = 0.05
+                        reward = 0.1
                         message = f"✗ False flag — {inv_id} had no discrepancy."
 
                 cls._current_index += 1
             else:
-                reward = 0.05
+                reward = 0.1
                 message = "Already decided on this invoice."
 
         # ------------------------------------------------------------------
@@ -620,14 +607,13 @@ class InvoicereconcileenvEnvironment(Environment):
                     reward = 0.40
                     message = f"✓ {inv_id} correctly approved. Amount: {truth.get('correct_amount')}."
 
-                    # Check priority discount capture
                     if current_inv and current_inv.get("priority"):
                         deadline = current_inv.get("discount_deadline_steps", 0)
                         steps_used_on_invoice = sum(
                             1 for k in [cls._extracted.get(inv_id),
                                         cls._po_retrieved.get(inv_id),
                                         cls._receipt_retrieved.get(inv_id)] if k
-                        ) + 1  # +1 for this approve step
+                        ) + 1
                         if steps_used_on_invoice <= deadline:
                             discount = current_inv.get("early_payment_discount_pct", 0)
                             bonus_amt = round(truth.get("correct_amount", 0) * discount, 2)
@@ -638,18 +624,17 @@ class InvoicereconcileenvEnvironment(Environment):
                             message += " ⏰ Discount window missed — too many steps used."
                             cls._priority_bonuses[inv_id] = {"captured": False}
                 else:
-                    # Wrong approval — check tolerance
-                    variance_pct = truth.get("price_variance_pct", 0.0)
+                    variance_pct = truth.get("price_variance_pct", 0.01)
                     if truth.get("discrepancy_type") == "price" and variance_pct <= TOLERANCE_HARD:
                         reward = 0.15
                         message = f"Questionable approval of {inv_id} — price variance {variance_pct*100:.2f}% is above soft tolerance. Expected: '{truth.get('correct_action')}'."
                     else:
-                        reward = 0.05
+                        reward = 0.1
                         message = f"✗ Wrong approval of {inv_id}. Expected: '{truth.get('correct_action')}'."
 
                 cls._current_index += 1
             else:
-                reward = 0.05
+                reward = 0.1
                 message = "Already decided on this invoice."
 
         # ------------------------------------------------------------------
@@ -664,11 +649,11 @@ class InvoicereconcileenvEnvironment(Environment):
                     reward = 0.25
                     message = f"✓ {inv_id} correctly rejected."
                 else:
-                    reward = 0.05
+                    reward = 0.1
                     message = f"✗ Rejected {inv_id} but expected: '{truth.get('correct_action')}'."
                 cls._current_index += 1
             else:
-                reward = 0.05
+                reward = 0.1
                 message = "Already decided on this invoice."
 
         # ------------------------------------------------------------------
@@ -683,11 +668,11 @@ class InvoicereconcileenvEnvironment(Environment):
                     reward = 0.35
                     message = f"✓ {inv_id} correctly escalated. Reason: {action.reason}."
                 else:
-                    reward = 0.05
+                    reward = 0.1
                     message = f"Escalated {inv_id} unnecessarily. Expected: '{truth.get('correct_action')}'."
                 cls._current_index += 1
             else:
-                reward = 0.05
+                reward = 0.1
                 message = "Already decided on this invoice."
 
         # ------------------------------------------------------------------
@@ -706,19 +691,20 @@ class InvoicereconcileenvEnvironment(Environment):
                 priority_bonuses=cls._priority_bonuses,
             )
             reward += final_score * 0.5
-            # ========== CRITICAL FIX: CLAMP REWARD STRICTLY ==========
-            reward = max(0.001, min(0.999, reward))
-            reward = round(reward, 3)
             done = True
             message += (
                 f" | EPISODE COMPLETE. "
                 f"Final grade: {final_score:.3f}. "
                 f"Decisions: {cls._decisions}."
             )
-        else:
-            # ========== CRITICAL FIX: CLAMP STEP REWARD ==========
-            reward = max(0.001, min(0.999, reward))
-            reward = round(reward, 3)
+
+        # ========== ABSOLUTE FINAL CLAMP FOR EVERY REWARD ==========
+        reward = max(0.01, min(0.99, reward))
+        reward = round(reward, 3)
+        
+        # Ensure NOT exactly 0 or 1
+        if reward <= 0.0 or reward >= 1.0:
+            reward = 0.5
 
         cls._cumulative_reward += reward
 
@@ -764,6 +750,6 @@ def _serialize_invoice(inv: dict) -> dict:
         "line_items": inv.get("line_items", []),
         "bank_account": inv.get("bank_account"),
         "priority": inv.get("priority", False),
-        "early_payment_discount_pct": inv.get("early_payment_discount_pct", 0.0),
+        "early_payment_discount_pct": inv.get("early_payment_discount_pct", 0.01),
         "discount_deadline_steps": inv.get("discount_deadline_steps", 0),
     }
