@@ -256,15 +256,16 @@ def run_task(task_level: str, seed: int = 42) -> float:
                         final_grade = float(
                             msg.split("Final grade:")[1].strip().split()[0].rstrip(".")
                         )
+                        final_grade = min(max(final_grade, 0.001), 0.999)
                     except Exception:
-                        final_grade = 0.0
+                        final_grade = 0.001
                 break
 
     except Exception as e:
         log_end(success=False, steps=steps_taken, rewards=rewards)
-        return 0.0
+        return 0.001
     
-    success = final_grade > 0.0
+    success = final_grade > 0.001
     log_end(success=success, steps=steps_taken, rewards=rewards)
     return final_grade
 
