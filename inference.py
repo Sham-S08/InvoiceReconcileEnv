@@ -22,6 +22,7 @@ SPACE_URL    = os.environ.get("SPACE_URL", "https://shambhavis08-invoicereconcil
 TOLERANCE_SOFT = 0.02
 TOLERANCE_HARD = 0.05
 MAX_STEPS = 40
+SUCCESS_SCORE_THRESHOLD = 0.5
 
 _invoice_progress = {}
 
@@ -274,9 +275,12 @@ def run_task(task_level: str, seed: int = 42) -> float:
         log_end(success=False, steps=steps_taken, rewards=rewards)
         return 0.501
     
-    success = final_grade > 0.5
+    #SUCCESS_SCORE_THRESHOLD = 0.5
+    score = sum(rewards) / len(rewards) if rewards else 0.001
+    score = max(1e-6, min(score, 1 - 1e-6))
+    success = score >= SUCCESS_SCORE_THRESHOLD
     log_end(success=success, steps=steps_taken, rewards=rewards)
-    return final_grade
+    return score
 
 # ---------------------------------------------------------------------------
 # Main
