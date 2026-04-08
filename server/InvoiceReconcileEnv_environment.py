@@ -486,7 +486,7 @@ class InvoicereconcileenvEnvironment(Environment):
         if action.action_type == ActionType.EXTRACT_FIELDS:
             if current_inv and inv_id not in cls._extracted:
                 cls._extracted[inv_id] = True
-                reward = 0.15
+                reward = 0.04
 
                 priority_note = ""
                 if current_inv.get("priority"):
@@ -506,7 +506,7 @@ class InvoicereconcileenvEnvironment(Environment):
                     f"{priority_note}"
                 )
             else:
-                reward = 0.1
+                reward = 0.02
                 message = "Already extracted or no invoice available."
 
         # ------------------------------------------------------------------
@@ -516,7 +516,7 @@ class InvoicereconcileenvEnvironment(Environment):
             po_key = f"PO-{inv_id}"
             if current_inv and po_key in cls._pos and inv_id not in cls._po_retrieved:
                 cls._po_retrieved[inv_id] = True
-                reward = 0.10
+                reward = 0.03
                 po = cls._pos[po_key]
                 message = (
                     f"PO retrieved for {inv_id}: "
@@ -526,7 +526,7 @@ class InvoicereconcileenvEnvironment(Environment):
                     f"bank={po.get('bank_account', 'N/A')}."
                 )
             else:
-                reward = 0.1
+                reward = 0.02
                 message = "PO not found or already retrieved."
 
         # ------------------------------------------------------------------
@@ -536,7 +536,7 @@ class InvoicereconcileenvEnvironment(Environment):
             gr_key = f"GR-{inv_id}"
             if current_inv and gr_key in cls._receipts and inv_id not in cls._receipt_retrieved:
                 cls._receipt_retrieved[inv_id] = True
-                reward = 0.10
+                reward = 0.03
                 receipt = cls._receipts[gr_key]
                 invoiced_qty = current_inv["line_items"][0]["quantity"] if current_inv.get("line_items") else 0
                 received_qty = receipt["received_qty"]
@@ -548,7 +548,7 @@ class InvoicereconcileenvEnvironment(Environment):
                     )
                 message = f"Goods receipt for {inv_id}: received qty={received_qty}.{partial_note}"
             else:
-                reward = 0.1
+                reward = 0.02
                 message = "Receipt not found or already retrieved."
 
         # ------------------------------------------------------------------
@@ -565,21 +565,21 @@ class InvoicereconcileenvEnvironment(Environment):
                 if truth.get("has_discrepancy"):
                     expected_type = truth.get("discrepancy_type")
                     if flagged_as == expected_type:
-                        reward = 0.35
+                        reward = 0.08
                         message = f"✓ Correct! {inv_id} flagged as '{flagged_as}'."
                     else:
-                        reward = 0.15
+                        reward = 0.04
                         message = f"Discrepancy flagged but wrong type for {inv_id}. Expected: '{expected_type}', got: '{flagged_as}'."
                 else:
                     variance_pct = truth.get("price_variance_pct", 0.01)
                     if variance_pct <= TOLERANCE_SOFT:
-                        reward = 0.1
+                        reward = 0.02
                         message = f"✗ False flag — {inv_id} was within tolerance ({variance_pct*100:.2f}% < {TOLERANCE_SOFT*100:.0f}%). Should approve."
                     elif variance_pct <= TOLERANCE_HARD:
-                        reward = 0.2
+                        reward = 0.02
                         message = f"Cautious flag on {inv_id} — price variance {variance_pct*100:.2f}% is in grey zone ({TOLERANCE_SOFT*100:.0f}%–{TOLERANCE_HARD*100:.0f}%). Partial credit."
                     else:
-                        reward = 0.1
+                        reward = 0.02
                         message = f"✗ False flag — {inv_id} had no discrepancy."
 
                 cls._current_index += 1
@@ -597,7 +597,7 @@ class InvoicereconcileenvEnvironment(Environment):
                 cls._batch_status[inv_id] = "approved"
 
                 if truth.get("correct_action") == "approve":
-                    reward = 0.40
+                    reward = 0.09
                     message = f"✓ {inv_id} correctly approved. Amount: {truth.get('correct_amount')}."
 
                     if current_inv and current_inv.get("priority"):
@@ -610,7 +610,7 @@ class InvoicereconcileenvEnvironment(Environment):
                         if steps_used_on_invoice <= deadline:
                             discount = current_inv.get("early_payment_discount_pct", 0)
                             bonus_amt = round(truth.get("correct_amount", 0) * discount, 2)
-                            reward += 0.10
+                            reward += 0.03
                             message += f" ⚡ Early payment discount captured! Savings: {bonus_amt}."
                             cls._priority_bonuses[inv_id] = {"captured": True}
                         else:
@@ -619,10 +619,10 @@ class InvoicereconcileenvEnvironment(Environment):
                 else:
                     variance_pct = truth.get("price_variance_pct", 0.01)
                     if truth.get("discrepancy_type") == "price" and variance_pct <= TOLERANCE_HARD:
-                        reward = 0.15
+                        reward = 0.03
                         message = f"Questionable approval of {inv_id} — price variance {variance_pct*100:.2f}% is above soft tolerance. Expected: '{truth.get('correct_action')}'."
                     else:
-                        reward = 0.1
+                        reward = 0.03
                         message = f"✗ Wrong approval of {inv_id}. Expected: '{truth.get('correct_action')}'."
 
                 cls._current_index += 1
@@ -639,14 +639,14 @@ class InvoicereconcileenvEnvironment(Environment):
                 cls._decisions[inv_id] = "reject"
                 cls._batch_status[inv_id] = "rejected"
                 if truth.get("correct_action") == "reject":
-                    reward = 0.25
+                    reward = 0.06
                     message = f"✓ {inv_id} correctly rejected."
                 else:
-                    reward = 0.1
+                    reward = 0.02
                     message = f"✗ Rejected {inv_id} but expected: '{truth.get('correct_action')}'."
                 cls._current_index += 1
             else:
-                reward = 0.1
+                reward = 0.02
                 message = "Already decided on this invoice."
 
         # ------------------------------------------------------------------
@@ -658,14 +658,14 @@ class InvoicereconcileenvEnvironment(Environment):
                 cls._decisions[inv_id] = "escalate"
                 cls._batch_status[inv_id] = "escalated"
                 if truth.get("correct_action") == "escalate":
-                    reward = 0.35
+                    reward = 0.08
                     message = f"✓ {inv_id} correctly escalated. Reason: {action.reason}."
                 else:
-                    reward = 0.1
+                    reward = 0.02
                     message = f"Escalated {inv_id} unnecessarily. Expected: '{truth.get('correct_action')}'."
                 cls._current_index += 1
             else:
-                reward = 0.1
+                reward = 0.02
                 message = "Already decided on this invoice."
 
         # ------------------------------------------------------------------
@@ -683,7 +683,7 @@ class InvoicereconcileenvEnvironment(Environment):
                 cls.MAX_STEPS,
                 priority_bonuses=cls._priority_bonuses,
             )
-            reward += final_score * 0.5
+            reward += final_score * 0.08                   # CHANGED: tiny final bonus
             done = True
             message += (
                 f" | EPISODE COMPLETE. "
