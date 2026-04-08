@@ -26,7 +26,7 @@ MAX_STEPS = 40
 _invoice_progress = {}
 
 # Always initialize with injected base_url and api_key
-client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+#client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 
 # ---------------------------------------------------------------------------
 # Structured stdout loggers
