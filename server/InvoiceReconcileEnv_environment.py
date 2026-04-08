@@ -404,8 +404,9 @@ def grade_episode(
     #         score = score / max(score, 1.0)
         
     score = round(score, 3)
-    score = min(score, 0.99)     
-    score = max(score, 0.01)     # safety
+    # CRITICAL: Cap to 0.998 to prevent {:.3f} formatting rounding to 1.000
+    score = min(score, 0.998)     
+    score = max(score, 0.001)     # safety
 
     return score
 
@@ -683,6 +684,9 @@ class InvoicereconcileenvEnvironment(Environment):
                 cls.MAX_STEPS,
                 priority_bonuses=cls._priority_bonuses,
             )
+            # CRITICAL: Ensure final_score cannot produce 1.000 when formatted with {:.3f}
+            final_score = max(0.001, min(0.998, final_score))
+            
             reward += final_score * 0.04                   # CHANGED: tiny final bonus
             done = True
             message += (
@@ -692,7 +696,7 @@ class InvoicereconcileenvEnvironment(Environment):
             )
 
         # ========== ABSOLUTE FINAL CLAMP FOR EVERY REWARD ==========
-        reward = max(0.01, min(0.99, reward))
+        reward = max(0.001, min(0.999, reward))
         reward = round(reward, 3)
         
         # Ensure NOT exactly 0 or 1
