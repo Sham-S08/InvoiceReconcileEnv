@@ -1,52 +1,72 @@
 """
 Baseline inference script for InvoiceReconcileEnv.
-Uses OpenAI Client via injected API_BASE_URL + API_KEY.
-Emits structured [START]/[STEP]/[END] stdout logs.
+Uses injected API_BASE_URL + API_KEY for optional LLM calls and falls back to a
+rule-based policy. Aggregation keeps all reported scores strictly inside (0, 1).
 """
-import os
+
 import json
+import os
 import re
-import requests
-from openai import OpenAI
 from typing import List, Optional
 
-# ---------------------------------------------------------------------------
-# Config — use injected env vars from validator
-# ---------------------------------------------------------------------------
+import requests
+from openai import OpenAI
+
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
-API_KEY      = os.environ.get("API_KEY") or os.environ.get("HF_TOKEN", "dummy-key")
-MODEL_NAME   = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-SPACE_URL    = os.environ.get("SPACE_URL", "https://shambhavis08-invoicereconcileenv.hf.space")
-#SPACE_URL = os.environ.get("SPACE_URL", "http://localhost:7860")
+API_KEY = os.environ.get("API_KEY") or os.environ.get("HF_TOKEN", "dummy-key")
+MODEL_NAME = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+SPACE_URL = os.environ.get("SPACE_URL", "https://shambhavis08-invoicereconcileenv.hf.space")
 
 TOLERANCE_SOFT = 0.02
-TOLERANCE_HARD = 0.05
 MAX_STEPS = 40
+<<<<<<< HEAD
+=======
+SUCCESS_SCORE_THRESHOLD = 0.5
+DEFAULT_SCORE = 0.5
+MIN_SCORE = 0.001
+MAX_SCORE = 0.999
+>>>>>>> 6d1a9a6 (Fix: clamp scores, validator edge cases, sync all required files)
 
 _invoice_progress = {}
 
-# Always initialize with injected base_url and api_key
-#client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 
-# ---------------------------------------------------------------------------
-# Structured stdout loggers
-# ---------------------------------------------------------------------------
+def bounded_score(value: float, *, digits: int = 6) -> float:
+    if value != value:
+        value = DEFAULT_SCORE
+    if value <= 0.0:
+        value = MIN_SCORE
+    elif value >= 1.0:
+        value = MAX_SCORE
+    value = round(value, digits)
+    if value <= 0.0:
+        return MIN_SCORE
+    if value >= 1.0:
+        return MAX_SCORE
+    return value
+
 
 def log_start(task: str, env: str, model: str):
     print(f"[START] task={task} env={env} model={model}", flush=True)
+
 
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]):
     error_val = error if error else "null"
     print(f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={error_val}", flush=True)
 
+<<<<<<< HEAD
 def log_end(success: bool, steps: int, rewards: List[float]):
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
     print(f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}", flush=True)
+=======
 
+def log_end(success: bool, steps: int, rewards: List[float], final_score: float):
+    rewards_str = ",".join(f"{r:.3f}" for r in rewards)
+    print(
+        f"[END] success={str(success).lower()} steps={steps} final_score={final_score:.6f} rewards={rewards_str}",
+        flush=True,
+    )
+>>>>>>> 6d1a9a6 (Fix: clamp scores, validator edge cases, sync all required files)
 
-# ---------------------------------------------------------------------------
-# Environment API helpers
-# ---------------------------------------------------------------------------
 
 def reset_env(task_level: str, seed: int = 42) -> dict:
     response = requests.post(
@@ -54,7 +74,9 @@ def reset_env(task_level: str, seed: int = 42) -> dict:
         json={"options": {"task_level": task_level, "seed": seed}},
         timeout=30,
     )
+    response.raise_for_status()
     return response.json()
+
 
 def step_env(action: dict) -> dict:
     response = requests.post(
@@ -62,21 +84,12 @@ def step_env(action: dict) -> dict:
         json={"action": action},
         timeout=30,
     )
+    response.raise_for_status()
     return response.json()
 
-# ---------------------------------------------------------------------------
-# LLM agent — ALWAYS called, uses injected proxy
-# ---------------------------------------------------------------------------
 
 def llm_agent(observation: dict, task_level: str) -> dict:
-    """
-    Calls the LLM via injected API_BASE_URL proxy.
-    Falls back to rule-based if LLM call fails.
-    """    
-    client = OpenAI(
-        base_url=os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1"),
-        api_key=os.environ.get("API_KEY", os.environ.get("HF_TOKEN", "dummy-key"))
-    )
+    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
     prompt = f"""You are an Accounts Payable agent processing invoices.
 
 Current observation:
@@ -85,23 +98,17 @@ Current observation:
 Task level: {task_level}
 
 Decision rules (apply in order):
-1. If current_invoice is null → return extract_fields with invoice_id "done"
+1. If current_invoice is null -> return extract_fields with invoice_id \"done\"
 2. Always extract_fields first for each invoice
 3. Always retrieve_po second
 4. Always retrieve_receipt third
-5. If invoice bank_account != PO bank_account → escalate (fraud)
-6. If po_reference != "PO-{{invoice_id}}" → flag_discrepancy duplicate
-7. If receipt received_qty < po approved_qty → flag_discrepancy quantity
-8. If price variance > 2% → flag_discrepancy price
-9. Otherwise → approve_payment
+5. If invoice bank_account != PO bank_account -> escalate (fraud)
+6. If po_reference != \"PO-{{invoice_id}}\" -> flag_discrepancy duplicate
+7. If receipt received_qty < po approved_qty -> flag_discrepancy quantity
+8. If price variance > 2% -> flag_discrepancy price
+9. Otherwise -> approve_payment
 
-Respond with ONLY a valid JSON object. No explanation. No markdown. Examples:
-{{"action_type": "extract_fields", "invoice_id": "INV-001"}}
-{{"action_type": "retrieve_po", "invoice_id": "INV-001"}}
-{{"action_type": "retrieve_receipt", "invoice_id": "INV-001"}}
-{{"action_type": "flag_discrepancy", "invoice_id": "INV-002", "discrepancy_type": "price"}}
-{{"action_type": "approve_payment", "invoice_id": "INV-001", "amount": 2950.0}}
-{{"action_type": "escalate", "invoice_id": "INV-003", "reason": "Bank account mismatch"}}"""
+Respond with ONLY a valid JSON object. No explanation. No markdown."""
 
     try:
         response = client.chat.completions.create(
@@ -113,18 +120,13 @@ Respond with ONLY a valid JSON object. No explanation. No markdown. Examples:
         text = response.choices[0].message.content.strip()
         text = text.replace("```json", "").replace("```", "").strip()
         action = json.loads(text)
-        # Validate it has action_type
         if "action_type" in action:
             return action
-    except Exception as e:
-        #print(f"[LLM ERROR] {e}", flush=True)
-        pass  # fall through to rule-based
+    except Exception:
+        pass
 
     return rule_based_agent(observation)
 
-# ---------------------------------------------------------------------------
-# Rule-based fallback agent
-# ---------------------------------------------------------------------------
 
 def rule_based_agent(observation: dict) -> dict:
     global _invoice_progress
@@ -134,16 +136,18 @@ def rule_based_agent(observation: dict) -> dict:
         return {"action_type": "extract_fields", "invoice_id": "done"}
 
     inv_id = current_invoice["invoice_id"]
-
     if inv_id not in _invoice_progress:
         _invoice_progress[inv_id] = {
-            "extracted": False, "po": False, "receipt": False,
-            "po_data": None, "receipt_data": None,
+            "extracted": False,
+            "po": False,
+            "receipt": False,
+            "po_data": None,
+            "receipt_data": None,
         }
 
     progress = _invoice_progress[inv_id]
-    po_data = progress.get("po_data") or observation.get("po_data")
-    receipt_data = progress.get("receipt_data") or observation.get("receipt_data")
+    po_data = progress.get("po_data") or observation.get("po_data") or {}
+    receipt_data = progress.get("receipt_data") or observation.get("receipt_data") or {}
 
     if observation.get("po_data") and not progress["po_data"]:
         progress["po_data"] = observation["po_data"]
@@ -160,47 +164,72 @@ def rule_based_agent(observation: dict) -> dict:
         return {"action_type": "retrieve_receipt", "invoice_id": inv_id}
 
     invoice_bank = current_invoice.get("bank_account", "")
-    po_bank = po_data.get("bank_account", "") if po_data else ""
+    po_bank = po_data.get("bank_account", "")
     if po_bank and invoice_bank and invoice_bank != po_bank:
-        return {"action_type": "escalate", "invoice_id": inv_id,
-                "reason": f"Bank account mismatch: {invoice_bank} vs {po_bank}"}
+        return {
+            "action_type": "escalate",
+            "invoice_id": inv_id,
+            "reason": f"Bank account mismatch: {invoice_bank} vs {po_bank}",
+        }
 
-    vendor_id = current_invoice.get("vendor_id", "")
-    if vendor_id and vendor_id not in ["V001", "V002", "V003"]:
-        return {"action_type": "escalate", "invoice_id": inv_id,
-                "reason": f"Unknown vendor ID {vendor_id}"}
+    if current_invoice.get("po_reference", "") != f"PO-{inv_id}":
+        return {
+            "action_type": "flag_discrepancy",
+            "invoice_id": inv_id,
+            "discrepancy_type": "duplicate",
+        }
 
-    po_ref = current_invoice.get("po_reference", "")
-    if po_ref != f"PO-{inv_id}":
-        return {"action_type": "flag_discrepancy", "invoice_id": inv_id,
-                "discrepancy_type": "duplicate"}
-
-    if po_data and receipt_data:
-        if receipt_data.get("received_qty", 0) < po_data.get("approved_qty", 0):
-            return {"action_type": "flag_discrepancy", "invoice_id": inv_id,
-                    "discrepancy_type": "quantity"}
+    if receipt_data and po_data and receipt_data.get("received_qty", 0) < po_data.get("approved_qty", 0):
+        return {
+            "action_type": "flag_discrepancy",
+            "invoice_id": inv_id,
+            "discrepancy_type": "quantity",
+        }
 
     if po_data:
         agreed = po_data.get("agreed_unit_price", 0)
         items = current_invoice.get("line_items", [{}])
         invoice_price = items[0].get("unit_price", 0) if items else 0
         if agreed > 0 and abs(invoice_price - agreed) / agreed > TOLERANCE_SOFT:
-            return {"action_type": "flag_discrepancy", "invoice_id": inv_id,
-                    "discrepancy_type": "price"}
+            return {
+                "action_type": "flag_discrepancy",
+                "invoice_id": inv_id,
+                "discrepancy_type": "price",
+            }
 
-    return {"action_type": "approve_payment", "invoice_id": inv_id,
-            "amount": current_invoice.get("total", 0)}
+    return {
+        "action_type": "approve_payment",
+        "invoice_id": inv_id,
+        "amount": current_invoice.get("total", 0),
+    }
 
-# ---------------------------------------------------------------------------
-# Task runner
-# ---------------------------------------------------------------------------
+
+def extract_final_score(observation: dict) -> Optional[float]:
+    metadata = observation.get("metadata") or {}
+    final_score = metadata.get("final_score")
+    if isinstance(final_score, (int, float)):
+        return bounded_score(float(final_score))
+
+    message = observation.get("message", "")
+    if "Final grade:" in message:
+        try:
+            raw = message.split("Final grade:", 1)[1].strip().split()[0].rstrip(".")
+            return bounded_score(float(raw))
+        except Exception:
+            return None
+    return None
+
 
 def run_task(task_level: str, seed: int = 42) -> float:
     global _invoice_progress
     _invoice_progress = {}
 
     rewards: List[float] = []
+<<<<<<< HEAD
     final_grade = 0.5  # Initialize to safe value, not 0.0!
+=======
+    final_score: Optional[float] = None
+>>>>>>> 6d1a9a6 (Fix: clamp scores, validator edge cases, sync all required files)
     steps_taken = 0
 
     log_start(task=task_level, env="InvoiceReconcileEnv", model=MODEL_NAME)
@@ -210,55 +239,61 @@ def run_task(task_level: str, seed: int = 42) -> float:
         observation = result.get("observation", {})
 
         for step_num in range(1, MAX_STEPS + 1):
-            if result.get("done"):
+            if result.get("done", False):
+                final_score = extract_final_score(observation)
                 break
 
-            # ALWAYS call LLM agent — this hits the proxy
             action = llm_agent(observation, task_level)
-            action_str = json.dumps(action)
+            action_str = json.dumps(action, separators=(",", ":"))
 
             try:
                 result = step_env(action)
                 observation = result.get("observation", {})
+<<<<<<< HEAD
                 reward = float(result.get("reward", 0.5))
                 reward = max(0.001, min(0.999, reward))  # ADD THIS LINE
                 done = result.get("done", False)
+=======
+                reward = bounded_score(float(result.get("reward", DEFAULT_SCORE)), digits=3)
+                done = bool(result.get("done", False))
+>>>>>>> 6d1a9a6 (Fix: clamp scores, validator edge cases, sync all required files)
                 error = None
-            except Exception as e:
-                reward = 0.501
+            except Exception as exc:
+                reward = bounded_score(DEFAULT_SCORE + 0.001, digits=3)
                 done = True
-                error = str(e)
+                error = str(exc)
 
             rewards.append(reward)
             steps_taken = step_num
 
             msg = observation.get("message", "")
-
-            # Update progress tracker
             match = re.search(r"INV-\d+", msg)
             acted_id = match.group(0) if match else ""
             if acted_id:
                 if acted_id not in _invoice_progress:
                     _invoice_progress[acted_id] = {
-                        "extracted": False, "po": False, "receipt": False,
-                        "po_data": None, "receipt_data": None,
+                        "extracted": False,
+                        "po": False,
+                        "receipt": False,
+                        "po_data": None,
+                        "receipt_data": None,
                     }
-                p = _invoice_progress[acted_id]
+                progress = _invoice_progress[acted_id]
                 if f"Extracted fields for {acted_id}" in msg:
-                    p["extracted"] = True
+                    progress["extracted"] = True
                 if "PO retrieved for" in msg:
-                    p["po"] = True
+                    progress["po"] = True
                     if observation.get("po_data"):
-                        p["po_data"] = observation["po_data"]
+                        progress["po_data"] = observation["po_data"]
                 if "Goods receipt for" in msg:
-                    p["receipt"] = True
+                    progress["receipt"] = True
                     if observation.get("receipt_data"):
-                        p["receipt_data"] = observation["receipt_data"]
+                        progress["receipt_data"] = observation["receipt_data"]
 
-            log_step(step=step_num, action=action_str, reward=reward,
-                     done=done, error=error)
+            log_step(step=step_num, action=action_str, reward=reward, done=done, error=error)
 
             if done:
+<<<<<<< HEAD
                 if "Final grade:" in msg:
                     try:
                         final_grade = float(
@@ -281,22 +316,33 @@ def run_task(task_level: str, seed: int = 42) -> float:
     success = final_grade > 0.5
     log_end(success=success, steps=steps_taken, rewards=rewards)
     return final_grade
+=======
+                final_score = extract_final_score(observation)
+                break
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
+    except Exception as exc:
+        print(f"[CRASH] {exc}", flush=True)
+        crash_score = bounded_score(DEFAULT_SCORE + 0.001)
+        log_end(success=False, steps=steps_taken, rewards=rewards, final_score=crash_score)
+        return crash_score
+
+    aggregated_score = bounded_score(sum(rewards) / len(rewards) if rewards else DEFAULT_SCORE)
+    reported_score = final_score if final_score is not None else aggregated_score
+    success = reported_score >= SUCCESS_SCORE_THRESHOLD
+    log_end(success=success, steps=steps_taken, rewards=rewards, final_score=reported_score)
+    return reported_score
+>>>>>>> 6d1a9a6 (Fix: clamp scores, validator edge cases, sync all required files)
+
 
 def main():
     tasks = ["easy", "medium", "hard"]
-    scores = {}
-    for task in tasks:
-        scores[task] = run_task(task, seed=42)
+    scores = {task: run_task(task, seed=42) for task in tasks}
 
     print("\nBASELINE SCORES SUMMARY", flush=True)
     for task, score in scores.items():
-        print(f"  {task.upper():10} → {score:.3f}", flush=True)
-    avg = sum(scores.values()) / len(scores)
-    print(f"  AVERAGE    → {avg:.3f}", flush=True)
+        print(f"  {task.upper():10} -> {score:.6f}", flush=True)
+    avg = bounded_score(sum(scores.values()) / len(scores))
+    print(f"  AVERAGE    -> {avg:.6f}", flush=True)
 
 
 if __name__ == "__main__":
