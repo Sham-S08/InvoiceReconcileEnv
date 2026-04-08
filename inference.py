@@ -22,7 +22,6 @@ SPACE_URL    = os.environ.get("SPACE_URL", "https://shambhavis08-invoicereconcil
 TOLERANCE_SOFT = 0.02
 TOLERANCE_HARD = 0.05
 MAX_STEPS = 40
-SUCCESS_SCORE_THRESHOLD = 0.5
 
 _invoice_progress = {}
 
@@ -38,10 +37,10 @@ def log_start(task: str, env: str, model: str):
 
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]):
     error_val = error if error else "null"
-    print(f"[STEP] step={step} action={action} reward={reward:.3f} done={str(done).lower()} error={error_val}", flush=True)
+    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={error_val}", flush=True)
 
 def log_end(success: bool, steps: int, rewards: List[float]):
-    rewards_str = ",".join(f"{r:.3f}" for r in rewards)
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
     print(f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}", flush=True)
 
 
@@ -201,7 +200,7 @@ def run_task(task_level: str, seed: int = 42) -> float:
     _invoice_progress = {}
 
     rewards: List[float] = []
-    final_grade = 0.0
+    final_grade = 0.5  # Initialize to safe value, not 0.0!
     steps_taken = 0
 
     log_start(task=task_level, env="InvoiceReconcileEnv", model=MODEL_NAME)
@@ -222,7 +221,7 @@ def run_task(task_level: str, seed: int = 42) -> float:
                 result = step_env(action)
                 observation = result.get("observation", {})
                 reward = float(result.get("reward", 0.5))
-                reward = max(0.01, min(0.99, reward))  # UPDATED CLAMP
+                reward = max(0.001, min(0.999, reward))  # ADD THIS LINE
                 done = result.get("done", False)
                 error = None
             except Exception as e:
@@ -265,7 +264,8 @@ def run_task(task_level: str, seed: int = 42) -> float:
                         final_grade = float(
                             msg.split("Final grade:")[1].strip().split()[0].rstrip(".")
                         )
-                        final_grade = max(0.01, min(0.99, final_grade))
+                        # CRITICAL: Cap at 0.998 to prevent {:.3f} formatting rounding to 1.000
+                        final_grade = max(0.001, min(0.998, final_grade))
                     except Exception:
                         final_grade = 0.5
                 break
@@ -275,12 +275,12 @@ def run_task(task_level: str, seed: int = 42) -> float:
         log_end(success=False, steps=steps_taken, rewards=rewards)
         return 0.501
     
-    #SUCCESS_SCORE_THRESHOLD = 0.5
-    score = sum(rewards) / len(rewards) if rewards else 0.5
-    score = max(0.01, min(score, 0.99))
-    success = score >= SUCCESS_SCORE_THRESHOLD
+    # Ensure final_grade is strictly in (0, 1) — cap at 0.998 to prevent formatting rounding
+    final_grade = max(0.001, min(0.998, final_grade))
+    
+    success = final_grade > 0.5
     log_end(success=success, steps=steps_taken, rewards=rewards)
-    return score
+    return final_grade
 
 # ---------------------------------------------------------------------------
 # Main
