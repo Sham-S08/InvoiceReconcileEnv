@@ -403,7 +403,7 @@ def grade_episode(
     if score > 0:
         score = score / max(score, 1.0)
     
-    score = max(score, 0.001)
+    #score = max(score, 0.001)
     score = round(score, 3)  # real score, no artificial cap
     
     return score
