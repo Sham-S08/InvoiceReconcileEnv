@@ -683,7 +683,7 @@ class InvoicereconcileenvEnvironment(Environment):
                 cls.MAX_STEPS,
                 priority_bonuses=cls._priority_bonuses,
             )
-            reward += final_score * 0.08                   # CHANGED: tiny final bonus
+            reward += final_score * 0.04                   # CHANGED: tiny final bonus
             done = True
             message += (
                 f" | EPISODE COMPLETE. "
