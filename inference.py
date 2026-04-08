@@ -74,8 +74,8 @@ def llm_agent(observation: dict, task_level: str) -> dict:
     Falls back to rule-based if LLM call fails.
     """    
     client = OpenAI(
-    base_url=os.environ["API_BASE_URL"],
-    api_key=os.environ["API_KEY"]
+        base_url=os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1"),
+        api_key=os.environ.get("API_KEY", os.environ.get("HF_TOKEN", "dummy-key"))
     )
     prompt = f"""You are an Accounts Payable agent processing invoices.
 
@@ -270,6 +270,7 @@ def run_task(task_level: str, seed: int = 42) -> float:
                 break
 
     except Exception as e:
+        print(f"[CRASH] {e}", flush=True)
         log_end(success=False, steps=steps_taken, rewards=rewards)
         return 0.501
     
