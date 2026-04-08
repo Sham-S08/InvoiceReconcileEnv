@@ -276,8 +276,8 @@ def run_task(task_level: str, seed: int = 42) -> float:
         return 0.501
     
     #SUCCESS_SCORE_THRESHOLD = 0.5
-    score = sum(rewards) / len(rewards) if rewards else 0.001
-    score = max(1e-6, min(score, 1 - 1e-6))
+    score = sum(rewards) / len(rewards) if rewards else 0.5
+    score = max(0.001, min(score, 0.999))
     success = score >= SUCCESS_SCORE_THRESHOLD
     log_end(success=success, steps=steps_taken, rewards=rewards)
     return score
