@@ -38,10 +38,10 @@ def log_start(task: str, env: str, model: str):
 
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]):
     error_val = error if error else "null"
-    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={error_val}", flush=True)
+    print(f"[STEP] step={step} action={action} reward={reward:.3f} done={str(done).lower()} error={error_val}", flush=True)
 
 def log_end(success: bool, steps: int, rewards: List[float]):
-    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    rewards_str = ",".join(f"{r:.3f}" for r in rewards)
     print(f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}", flush=True)
 
 
@@ -222,7 +222,7 @@ def run_task(task_level: str, seed: int = 42) -> float:
                 result = step_env(action)
                 observation = result.get("observation", {})
                 reward = float(result.get("reward", 0.5))
-                reward = max(0.001, min(0.999, reward))  # ADD THIS LINE
+                reward = max(0.01, min(0.99, reward))  # UPDATED CLAMP
                 done = result.get("done", False)
                 error = None
             except Exception as e:
@@ -265,7 +265,7 @@ def run_task(task_level: str, seed: int = 42) -> float:
                         final_grade = float(
                             msg.split("Final grade:")[1].strip().split()[0].rstrip(".")
                         )
-                        final_grade = max(0.001, min(0.999, final_grade))
+                        final_grade = max(0.01, min(0.99, final_grade))
                     except Exception:
                         final_grade = 0.5
                 break
@@ -277,7 +277,7 @@ def run_task(task_level: str, seed: int = 42) -> float:
     
     #SUCCESS_SCORE_THRESHOLD = 0.5
     score = sum(rewards) / len(rewards) if rewards else 0.5
-    score = max(0.001, min(score, 0.999))
+    score = max(0.01, min(score, 0.99))
     success = score >= SUCCESS_SCORE_THRESHOLD
     log_end(success=success, steps=steps_taken, rewards=rewards)
     return score

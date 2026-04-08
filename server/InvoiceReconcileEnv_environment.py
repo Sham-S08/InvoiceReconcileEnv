@@ -404,8 +404,8 @@ def grade_episode(
     #         score = score / max(score, 1.0)
         
     score = round(score, 3)
-    score = min(score, 0.999)     
-    score = max(score, 0.001)     # safety
+    score = min(score, 0.99)     
+    score = max(score, 0.01)     # safety
 
     return score
 
@@ -692,7 +692,7 @@ class InvoicereconcileenvEnvironment(Environment):
             )
 
         # ========== ABSOLUTE FINAL CLAMP FOR EVERY REWARD ==========
-        reward = max(0.001, min(0.999, reward))
+        reward = max(0.01, min(0.99, reward))
         reward = round(reward, 3)
         
         # Ensure NOT exactly 0 or 1

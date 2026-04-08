@@ -150,5 +150,5 @@ reward_function:
     Efficiency penalty (×0.85) if >80% of max steps used.
     Episode ends with bonus reward = final_grade × 0.5.
     Early payment discount capture adds +0.10 bonus.
-  range: [0.001, 0.999]
+  range: [0.01, 0.99]
   sparse: false
