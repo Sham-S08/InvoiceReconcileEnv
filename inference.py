@@ -1,7 +1,7 @@
 """
 Baseline inference script for InvoiceReconcileEnv.
-Uses injected API_BASE_URL + API_KEY for optional LLM calls and falls back to a
-rule-based policy. Aggregation keeps all reported scores strictly inside (0, 1).
+Uses the OpenAI client for all LLM calls and emits the exact stdout format
+required by the OpenEnv hackathon validator.
 """
 
 import json
@@ -12,10 +12,13 @@ from typing import List, Optional
 import requests
 from openai import OpenAI
 
-API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
-API_KEY = os.environ.get("API_KEY") or os.environ.get("HF_TOKEN", "dummy-key")
-MODEL_NAME = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-SPACE_URL = os.environ.get("SPACE_URL", "https://shambhavis08-invoicereconcileenv.hf.space")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
+HF_TOKEN = os.getenv("HF_TOKEN")
+SPACE_URL = os.getenv("SPACE_URL", "https://shambhavis08-invoicereconcileenv.hf.space")
+
+if HF_TOKEN is None:
+    raise ValueError("HF_TOKEN environment variable is required")
 
 TOLERANCE_SOFT = 0.02
 MAX_STEPS = 40
@@ -48,15 +51,15 @@ def log_start(task: str, env: str, model: str):
 
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]):
     error_val = error if error else "null"
-    print(f"[STEP] step={step} action={action} reward={reward:.3f} done={str(done).lower()} error={error_val}", flush=True)
-
-
-def log_end(success: bool, steps: int, rewards: List[float], final_score: float):
-    rewards_str = ",".join(f"{r:.3f}" for r in rewards)
     print(
-        f"[END] success={str(success).lower()} steps={steps} final_score={final_score:.6f} rewards={rewards_str}",
+        f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={error_val}",
         flush=True,
     )
+
+
+def log_end(success: bool, steps: int, rewards: List[float]):
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    print(f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}", flush=True)
 
 
 def reset_env(task_level: str, seed: int = 42) -> dict:
@@ -80,7 +83,7 @@ def step_env(action: dict) -> dict:
 
 
 def llm_agent(observation: dict, task_level: str) -> dict:
-    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
     prompt = f"""You are an Accounts Payable agent processing invoices.
 
 Current observation:
@@ -196,11 +199,6 @@ def rule_based_agent(observation: dict) -> dict:
 
 
 def extract_final_score(observation: dict) -> Optional[float]:
-    metadata = observation.get("metadata") or {}
-    final_score = metadata.get("final_score")
-    if isinstance(final_score, (int, float)):
-        return bounded_score(float(final_score))
-
     message = observation.get("message", "")
     if "Final grade:" in message:
         try:
@@ -218,6 +216,7 @@ def run_task(task_level: str, seed: int = 42) -> float:
     rewards: List[float] = []
     final_score: Optional[float] = None
     steps_taken = 0
+    success = False
 
     log_start(task=task_level, env="InvoiceReconcileEnv", model=MODEL_NAME)
 
@@ -236,11 +235,11 @@ def run_task(task_level: str, seed: int = 42) -> float:
             try:
                 result = step_env(action)
                 observation = result.get("observation", {})
-                reward = bounded_score(float(result.get("reward", DEFAULT_SCORE)), digits=3)
+                reward = bounded_score(float(result.get("reward", DEFAULT_SCORE)), digits=2)
                 done = bool(result.get("done", False))
-                error = None
+                error = observation.get("last_action_error")
             except Exception as exc:
-                reward = bounded_score(DEFAULT_SCORE + 0.001, digits=3)
+                reward = bounded_score(DEFAULT_SCORE + 0.001, digits=2)
                 done = True
                 error = str(exc)
 
@@ -277,17 +276,15 @@ def run_task(task_level: str, seed: int = 42) -> float:
                 final_score = extract_final_score(observation)
                 break
 
-    except Exception as exc:
-        print(f"[CRASH] {exc}", flush=True)
-        crash_score = bounded_score(DEFAULT_SCORE + 0.001)
-        log_end(success=False, steps=steps_taken, rewards=rewards, final_score=crash_score)
-        return crash_score
+        aggregated_score = bounded_score(sum(rewards) / len(rewards) if rewards else DEFAULT_SCORE)
+        reported_score = final_score if final_score is not None else aggregated_score
+        success = reported_score >= SUCCESS_SCORE_THRESHOLD
+        return reported_score
 
-    aggregated_score = bounded_score(sum(rewards) / len(rewards) if rewards else DEFAULT_SCORE)
-    reported_score = final_score if final_score is not None else aggregated_score
-    success = reported_score >= SUCCESS_SCORE_THRESHOLD
-    log_end(success=success, steps=steps_taken, rewards=rewards, final_score=reported_score)
-    return reported_score
+    except Exception:
+        return bounded_score(DEFAULT_SCORE + 0.001)
+    finally:
+        log_end(success=success, steps=steps_taken, rewards=rewards)
 
 
 def main():
