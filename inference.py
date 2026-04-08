@@ -19,13 +19,10 @@ SPACE_URL = os.environ.get("SPACE_URL", "https://shambhavis08-invoicereconcileen
 
 TOLERANCE_SOFT = 0.02
 MAX_STEPS = 40
-<<<<<<< HEAD
-=======
 SUCCESS_SCORE_THRESHOLD = 0.5
 DEFAULT_SCORE = 0.5
 MIN_SCORE = 0.001
 MAX_SCORE = 0.999
->>>>>>> 6d1a9a6 (Fix: clamp scores, validator edge cases, sync all required files)
 
 _invoice_progress = {}
 
@@ -51,13 +48,8 @@ def log_start(task: str, env: str, model: str):
 
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]):
     error_val = error if error else "null"
-    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={error_val}", flush=True)
+    print(f"[STEP] step={step} action={action} reward={reward:.3f} done={str(done).lower()} error={error_val}", flush=True)
 
-<<<<<<< HEAD
-def log_end(success: bool, steps: int, rewards: List[float]):
-    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}", flush=True)
-=======
 
 def log_end(success: bool, steps: int, rewards: List[float], final_score: float):
     rewards_str = ",".join(f"{r:.3f}" for r in rewards)
@@ -65,7 +57,6 @@ def log_end(success: bool, steps: int, rewards: List[float], final_score: float)
         f"[END] success={str(success).lower()} steps={steps} final_score={final_score:.6f} rewards={rewards_str}",
         flush=True,
     )
->>>>>>> 6d1a9a6 (Fix: clamp scores, validator edge cases, sync all required files)
 
 
 def reset_env(task_level: str, seed: int = 42) -> dict:
@@ -225,11 +216,7 @@ def run_task(task_level: str, seed: int = 42) -> float:
     _invoice_progress = {}
 
     rewards: List[float] = []
-<<<<<<< HEAD
-    final_grade = 0.5  # Initialize to safe value, not 0.0!
-=======
     final_score: Optional[float] = None
->>>>>>> 6d1a9a6 (Fix: clamp scores, validator edge cases, sync all required files)
     steps_taken = 0
 
     log_start(task=task_level, env="InvoiceReconcileEnv", model=MODEL_NAME)
@@ -249,14 +236,8 @@ def run_task(task_level: str, seed: int = 42) -> float:
             try:
                 result = step_env(action)
                 observation = result.get("observation", {})
-<<<<<<< HEAD
-                reward = float(result.get("reward", 0.5))
-                reward = max(0.001, min(0.999, reward))  # ADD THIS LINE
-                done = result.get("done", False)
-=======
                 reward = bounded_score(float(result.get("reward", DEFAULT_SCORE)), digits=3)
                 done = bool(result.get("done", False))
->>>>>>> 6d1a9a6 (Fix: clamp scores, validator edge cases, sync all required files)
                 error = None
             except Exception as exc:
                 reward = bounded_score(DEFAULT_SCORE + 0.001, digits=3)
@@ -293,30 +274,6 @@ def run_task(task_level: str, seed: int = 42) -> float:
             log_step(step=step_num, action=action_str, reward=reward, done=done, error=error)
 
             if done:
-<<<<<<< HEAD
-                if "Final grade:" in msg:
-                    try:
-                        final_grade = float(
-                            msg.split("Final grade:")[1].strip().split()[0].rstrip(".")
-                        )
-                        # CRITICAL: Cap at 0.998 to prevent {:.3f} formatting rounding to 1.000
-                        final_grade = max(0.001, min(0.998, final_grade))
-                    except Exception:
-                        final_grade = 0.5
-                break
-
-    except Exception as e:
-        print(f"[CRASH] {e}", flush=True)
-        log_end(success=False, steps=steps_taken, rewards=rewards)
-        return 0.501
-    
-    # Ensure final_grade is strictly in (0, 1) — cap at 0.998 to prevent formatting rounding
-    final_grade = max(0.001, min(0.998, final_grade))
-    
-    success = final_grade > 0.5
-    log_end(success=success, steps=steps_taken, rewards=rewards)
-    return final_grade
-=======
                 final_score = extract_final_score(observation)
                 break
 
@@ -331,7 +288,6 @@ def run_task(task_level: str, seed: int = 42) -> float:
     success = reported_score >= SUCCESS_SCORE_THRESHOLD
     log_end(success=success, steps=steps_taken, rewards=rewards, final_score=reported_score)
     return reported_score
->>>>>>> 6d1a9a6 (Fix: clamp scores, validator edge cases, sync all required files)
 
 
 def main():
