@@ -12,13 +12,10 @@ from typing import List, Optional
 import requests
 from openai import OpenAI
 
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1")
+API_BASE_URL = os.environ["API_BASE_URL"]
+API_KEY = os.environ["API_KEY"]
 MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
-HF_TOKEN = os.getenv("HF_TOKEN")
 SPACE_URL = os.getenv("SPACE_URL", "https://shambhavis08-invoicereconcileenv.hf.space")
-
-if HF_TOKEN is None:
-    raise ValueError("HF_TOKEN environment variable is required")
 
 TOLERANCE_SOFT = 0.02
 MAX_STEPS = 40
@@ -57,9 +54,10 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
     )
 
 
-def log_end(success: bool, steps: int, rewards: List[float]):
-    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}", flush=True)
+def log_end(task: str, success: bool, steps: int, score: float, rewards: List[float]):
+    _ = success, rewards
+    safe_score = max(0.01, min(0.99, float(score)))
+    print(f"[END] task={task} score={safe_score:.2f} steps={steps}", flush=True)
 
 
 def reset_env(task_level: str, seed: int = 42) -> dict:
@@ -83,7 +81,7 @@ def step_env(action: dict) -> dict:
 
 
 def llm_agent(observation: dict, task_level: str) -> dict:
-    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
     prompt = f"""You are an Accounts Payable agent processing invoices.
 
 Current observation:
@@ -215,6 +213,7 @@ def run_task(task_level: str, seed: int = 42) -> float:
 
     rewards: List[float] = []
     final_score: Optional[float] = None
+    reported_score = bounded_score(DEFAULT_SCORE + 0.001)
     steps_taken = 0
     success = False
 
@@ -282,9 +281,10 @@ def run_task(task_level: str, seed: int = 42) -> float:
         return reported_score
 
     except Exception:
-        return bounded_score(DEFAULT_SCORE + 0.001)
+        reported_score = bounded_score(DEFAULT_SCORE + 0.001)
+        return reported_score
     finally:
-        log_end(success=success, steps=steps_taken, rewards=rewards)
+        log_end(task=task_level, success=success, steps=steps_taken, score=reported_score, rewards=rewards)
 
 
 def main():

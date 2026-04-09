@@ -201,8 +201,9 @@ http://localhost:8001/docs
 # Rule-based agent (no API key needed)
 python InvoiceReconcileEnv/inference.py
 
-# OpenAI-powered agent
-export OPENAI_API_KEY=your_key_here
+# Proxy-backed LLM agent
+export API_BASE_URL=https://your-proxy-host/v1
+export API_KEY=your_key_here
 python InvoiceReconcileEnv/inference.py
 ```
 
@@ -215,8 +216,8 @@ docker build -f InvoiceReconcileEnv/server/Dockerfile -t invoicereconcileenv .
 # Run
 docker run -p 7860:7860 invoicereconcileenv
 
-# With OpenAI key
-docker run -p 7860:7860 -e OPENAI_API_KEY=your_key invoicereconcileenv
+# With proxy-backed LLM config
+docker run -p 7860:7860 -e API_BASE_URL=https://your-proxy-host/v1 -e API_KEY=your_key invoicereconcileenv
 ```
 
 ---
