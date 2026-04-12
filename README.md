@@ -137,7 +137,8 @@ Tests: tolerance band reasoning, duplicate detection, multi-objective decision m
 | Early payment discount captured | `+0.10` |
 | Episode completion bonus | `+ 0.5 × final_grade` |
 
-Reward range: `[-1.0, 1.5]`. Fully dense — signal provided at every step.
+Reward range: `(-1.0, 1.5)`. Fully dense — signal provided at every step.
+All final episode scores returned by the environment are clamped strictly between **0.001 and 0.999** to satisfy the validator's "task scores out of range" check.
 
 ---
 
