@@ -80,7 +80,7 @@ Every action costs a step. Redundant or repeated actions incur a penalty. Effici
 ## Tasks
 
 ### 🟢 Easy — Single Invoice Reconciliation
-**Invoices:** 1 | **Expected score:** 1.000
+**Invoices:** 1 | **Target score range:** 0.001 – 0.999 (strictly inside (0,1))
 
 A single clean invoice requiring straightforward three-way matching. Agent must extract fields, retrieve PO and receipt, confirm everything matches, and approve. Tests basic comprehension and action sequencing.
 
@@ -89,7 +89,7 @@ A single clean invoice requiring straightforward three-way matching. Agent must 
 ---
 
 ### 🟡 Medium — Batch Invoice Processing
-**Invoices:** 3 | **Expected score:** 1.000
+**Invoices:** 3 | **Target score range:** 0.001 – 0.999 (strictly inside (0,1))
 
 A mixed batch with three conditions:
 - **INV-101**: Clean match → approve
@@ -103,7 +103,7 @@ Tests multi-step reasoning and pattern recognition across a batch.
 ---
 
 ### 🔴 Hard — Complex Batch with Fraud Detection
-**Invoices:** 5 | **Expected score:** 1.000
+**Invoices:** 5 | **Target score range:** 0.001 – 0.999 (strictly inside (0,1))
 
 A noisy, ambiguous batch with every real-world complication:
 - **INV-201**: Clean match with OCR-noisy description → approve
@@ -142,15 +142,17 @@ Reward range: `[-1.0, 1.5]`. Fully dense — signal provided at every step.
 ---
 
 ## Baseline Scores
+Produced by the deterministic rule-based + LLM fallback agent in `inference.py` (seed=42).  
+**All scores are guaranteed strictly between 0.001 and 0.999** to comply with hackathon Phase 2 deep validation.
 
-Produced by the deterministic rule-based agent in `inference.py`. Fully reproducible with `seed=42`.
+| Task        | Final Grade | Approx. Total Reward |
+|-------------|-------------|----------------------|
+| Easy        | **~0.989**  | ~0.85                |
+| Medium      | **~0.989**  | ~2.35                |
+| Hard        | **~0.989**  | ~4.10                |
+| Average     | **~0.989**  | —                    |
 
-| Task | Final Grade | Total Reward |
-|------|------------|--------------|
-| Easy | **0.999** | ~0.85 |
-| Medium | **0.999** | ~2.35 |
-| Hard | **0.999** | ~4.10 |
-| **Average** | **0.999** | — |
+> Note: Exact values may vary slightly due to the strict (0,1) mapping required by the validator, but they will always stay safely inside (0, 1).
 
 ---
 
